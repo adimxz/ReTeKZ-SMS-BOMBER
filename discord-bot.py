@@ -13,7 +13,7 @@ import json
 import os
 
 # ============= KONFIGURASYON =============
-TOKEN = ""  # Bot tokenini buraya yaz
+TOKEN = ""  # MTQ5MTg3ODU4OTc0OTI2NDQwNA.GKGxHn.WQNZerPCb61nDUN21xD2IEq8YVMI8WB0BNN3rI
 PREFIX = "!"
 YETKILI_ROLLER = ["Admin", "Moderator", "Owner"]
 COOLDOWN_SURESI = 30  # Saniye cinsinden bekleme
