@@ -15,7 +15,6 @@ import asyncio
 import threading
 from datetime import datetime
 import json
-import os
 
 # ============= KONFIGURASYON =============
 TOKEN = os.getenv("TOKEN")
