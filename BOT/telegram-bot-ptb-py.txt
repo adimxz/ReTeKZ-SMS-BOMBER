@@ -1,0 +1,410 @@
+#!/usr/bin/env python3
+# ReTeKZ Telegram SMS Bot (python-telegram-bot)
+# GitHub: github.com/adimxz/ReTeKZ
+
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters, CallbackQueryHandler
+from sms import SendSms
+from time import sleep
+import threading
+import json
+import os
+from datetime import datetime
+
+# ============= KONFIGURASYON =============
+TOKEN = ""  # Bot tokenini buraya yaz
+MAX_SMS = 100  # Maksimum SMS
+MIN_SMS = 10   # Minimum SMS
+DEFAULT_SMS = 52
+DEFAULT_DELAY = 0
+COOLDOWN_TIME = 30  # Saniye
+
+# Kullanıcı ayarları dosyası
+CONFIG_FILE = "user_configs.json"
+
+# Renkler (terminal için)
+R = "\033[91m"
+G = "\033[92m"
+Y = "\033[93m"
+C = "\033[96m"
+W = "\033[0m"
+
+# Cooldown takibi
+cooldown_users = {}
+
+def log_yaz(mesaj):
+    """Log kaydı tut"""
+    try:
+        with open("telegram_ptb_log.txt", "a", encoding="utf-8") as f:
+            f.write(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {mesaj}\n")
+    except:
+        pass
+
+def print_banner():
+    """Banner göster"""
+    print(f"""{C}
+╔══════════════════════════════════════════════════════════════╗
+║                                                              ║
+║   ██████╗ ███████╗████████╗███████╗██╗  ██╗███████╗         ║
+║   ██╔══██╗██╔════╝╚══██╔══╝╚══███╔╝██║ ██╔╝╚══███╔╝         ║
+║   ██████╔╝█████╗     ██║     ███╔╝ █████╔╝   ███╔╝          ║
+║   ██╔══██╗██╔══╝     ██║    ███╔╝  ██╔═██╗  ███╔╝           ║
+║   ██║  ██║███████╗   ██║   ███████╗██║  ██╗███████╗         ║
+║   ╚═╝  ╚═╝╚══════╝   ╚═╝   ╚══════╝╚═╝  ╚═╝╚══════╝         ║
+║                                                              ║
+║      TELEGRAM SMS BOT v2.0 (PTB) | @ReTeKZ                   ║
+╚══════════════════════════════════════════════════════════════╝{W}
+    """)
+
+# Servisleri topla
+servisler_sms = []
+for attribute in dir(SendSms):
+    if callable(getattr(SendSms, attribute)) and not attribute.startswith('__'):
+        servisler_sms.append(attribute)
+
+def load_user_config(user_id):
+    """Kullanıcı konfigürasyonunu yükle"""
+    try:
+        if os.path.exists(CONFIG_FILE):
+            with open(CONFIG_FILE, "r") as f:
+                configs = json.load(f)
+                return configs.get(str(user_id), {"adet": DEFAULT_SMS, "saniye": DEFAULT_DELAY})
+    except:
+        pass
+    return {"adet": DEFAULT_SMS, "saniye": DEFAULT_DELAY}
+
+def save_user_config(user_id, adet, saniye):
+    """Kullanıcı konfigürasyonunu kaydet"""
+    try:
+        configs = {}
+        if os.path.exists(CONFIG_FILE):
+            with open(CONFIG_FILE, "r") as f:
+                configs = json.load(f)
+        
+        configs[str(user_id)] = {"adet": adet, "saniye": saniye}
+        
+        with open(CONFIG_FILE, "w") as f:
+            json.dump(configs, f, indent=2)
+        return True
+    except:
+        return False
+
+def sms_gonderme_async(chat_id, telno, adet, delay, bot, update_id=None):
+    """SMS gönderme işlemi (async thread)"""
+    try:
+        sms = SendSms(telno, "")
+        gonderilen = 0
+        
+        for metod in servisler_sms:
+            if gonderilen >= adet:
+                break
+            try:
+                getattr(sms, metod)()
+                gonderilen += 1
+            except:
+                pass
+            
+            if delay > 0:
+                sleep(delay)
+        
+        # Sonuç mesajı
+        if gonderilen > 0:
+            bot.send_message(chat_id, f"✅ **SMS Gönderimi Tamamlandı!**\n\n📞 Numara: `+90{telno}`\n✅ Gönderilen: `{gonderilen}/{adet}`\n📡 Servis: `{len(servisler_sms)}`", parse_mode="Markdown")
+        else:
+            bot.send_message(chat_id, f"❌ **HATA!**\n\n📞 Numara: `+90{telno}`\n❌ SMS gönderilemedi!\n\nSebep: API hatası veya servisler çalışmıyor.", parse_mode="Markdown")
+        
+        log_yaz(f"SMS tamamlandı: {telno} - {gonderilen}/{adet}")
+        
+    except Exception as e:
+        bot.send_message(chat_id, f"❌ **Beklenmeyen Hata!**\n\n{str(e)}")
+        log_yaz(f"Hata: {e}")
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/start komutu"""
+    user = update.effective_user
+    welcome_text = f"""
+**🤖 Merhaba {user.first_name}!**
+
+ReTeKZ SMS Bot'a hoş geldin!
+
+📱 Bu bot ile SMS bombardımanı yapabilirsin.
+
+**📖 Komutlar:**
+• `/sms <numara> <adet> <aralık>` - SMS gönder
+• `/config` - Ayarlarını göster
+• `/set 55 2` - Varsayılan ayarları değiştir
+• `/info` - Bot bilgisi
+• `/servisler` - Servis listesi
+• `/help` - Yardım menüsü
+
+**📱 Örnekler:**
+• `/sms 5051234567` - (varsayılan ayarlarınla)
+• `/sms 5051234567 50 2` - (50 SMS, 2 sn aralık)
+
+**⚠️ Kurallar:**
+• Maksimum SMS: {MAX_SMS}
+• Minimum SMS: {MIN_SMS}
+• İzinsiz kullanım yasaktır!
+
+**👨‍💻 Geliştirici:** @ReTeKZ
+"""
+    await update.message.reply_text(welcome_text, parse_mode="Markdown")
+    log_yaz(f"Start komutu: {user.id} - {user.first_name}")
+
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/help komutu"""
+    help_text = f"""
+**📖 ReTeKZ SMS Bot - Yardım Menüsü**
+
+**🔧 Komutlar:**
+
+`/sms <numara> <adet> <aralık>` - SMS gönder
+`/config` - Mevcut ayarlarını göster
+`/set <adet> <aralık>` - Varsayılan ayarları değiştir
+`/info` - Bot bilgisi göster
+`/servisler` - Servis listesi göster
+`/help` - Bu menüyü göster
+
+**📱 Kullanım Örnekleri:**
+
+• `/sms 5051234567` - Varsayılan ayarlarınla gönder
+• `/sms 5051234567 30` - 30 SMS, varsayılan aralıkla
+• `/sms 5051234567 50 2` - 50 SMS, 2 sn aralıkla
+• `/set 55 1` - Varsayılanı 55 SMS, 1 sn yap
+
+**⚠️ Kurallar:**
+• Numara 10 haneli olmalı (5XXXXXXXXX)
+• Maksimum SMS: {MAX_SMS}
+• Minimum SMS: {MIN_SMS}
+• Aralık maksimum: 10 saniye
+
+**📊 İstatistik:**
+• Toplam Servis: {len(servisler_sms)}
+• Maksimum SMS: {MAX_SMS}
+
+**👨‍💻 Geliştirici:** @ReTeKZ
+"""
+    await update.message.reply_text(help_text, parse_mode="Markdown")
+    log_yaz(f"Help komutu: {update.effective_user.id}")
+
+async def info_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/info komutu"""
+    user_id = update.effective_user.id
+    user_config = load_user_config(user_id)
+    
+    info_text = f"""
+**🤖 ReTeKZ SMS Bot v2.0**
+
+**📊 Bot Bilgileri:**
+
+• **Servis Sayısı:** {len(servisler_sms)}
+• **Maksimum SMS:** {MAX_SMS}
+• **Minimum SMS:** {MIN_SMS}
+
+**⚙️ Senin Ayarların:**
+• **Varsayılan SMS:** {user_config['adet']}
+• **Varsayılan Aralık:** {user_config['saniye']} saniye
+
+**👨‍💻 Geliştirici:** @ReTeKZ
+**🔗 GitHub:** github.com/adimxz/ReTeKZ
+
+📖 Komutlar için: `/help`
+"""
+    await update.message.reply_text(info_text, parse_mode="Markdown")
+
+async def config_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/config komutu - mevcut ayarları göster"""
+    user_id = update.effective_user.id
+    user_config = load_user_config(user_id)
+    
+    config_text = f"""
+**⚙️ Mevcut Ayarların**
+
+📱 **Varsayılan SMS Adeti:** `{user_config['adet']}`
+⏱️ **Varsayılan Aralık:** `{user_config['saniye']}` saniye
+
+**📝 Ayarları değiştirmek için:**
+`/set <adet> <aralık>`
+
+**Örnek:** `/set 55 2`
+
+**⚠️ Sınırlar:**
+• SMS: {MIN_SMS} - {MAX_SMS}
+• Aralık: 0 - 10 saniye
+"""
+    await update.message.reply_text(config_text, parse_mode="Markdown")
+
+async def set_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/set <adet> <aralık> - ayarları değiştir"""
+    user_id = update.effective_user.id
+    
+    try:
+        args = context.args
+        if len(args) >= 2:
+            adet = int(args[0])
+            saniye = int(args[1])
+            
+            # Sınırları kontrol et
+            if adet > MAX_SMS:
+                adet = MAX_SMS
+            if adet < MIN_SMS:
+                adet = MIN_SMS
+            if saniye > 10:
+                saniye = 10
+            if saniye < 0:
+                saniye = 0
+            
+            if save_user_config(user_id, adet, saniye):
+                await update.message.reply_text(f"✅ **Ayarlar kaydedildi!**\n\n📱 SMS Adeti: `{adet}`\n⏱️ Aralık: `{saniye}` saniye", parse_mode="Markdown")
+                log_yaz(f"Ayarlar değişti: {user_id} - {adet}/{saniye}")
+            else:
+                await update.message.reply_text("❌ Ayarlar kaydedilemedi!")
+        else:
+            await update.message.reply_text(f"❌ **Hatalı Kullanım!**\n\nDoğru kullanım: `/set <adet> <aralık>`\nÖrnek: `/set 55 2`", parse_mode="Markdown")
+    except ValueError:
+        await update.message.reply_text("❌ **Hatalı Değer!**\n\nLütfen sayısal değerler girin.\nÖrnek: `/set 55 2`", parse_mode="Markdown")
+
+async def servisler_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/servisler komutu"""
+    servis_list = "\n".join([f"• `{s}`" for s in servisler_sms[:25]])
+    if len(servisler_sms) > 25:
+        servis_list += f"\n\n... ve {len(servisler_sms) - 25} servis daha"
+    
+    servis_text = f"**📋 Mevcut Servisler ({len(servisler_sms)})**\n\n{servis_list}"
+    
+    # Uzun mesajları parçala
+    if len(servis_text) > 4000:
+        await update.message.reply_text(f"**📋 Mevcut Servisler ({len(servisler_sms)})**\n\nServis sayısı çok fazla, detaylı liste için `/info` yaz.", parse_mode="Markdown")
+    else:
+        await update.message.reply_text(servis_text, parse_mode="Markdown")
+
+async def sms_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/sms komutu - SMS gönder"""
+    user_id = update.effective_user.id
+    chat_id = update.effective_chat.id
+    
+    # Cooldown kontrolü
+    if user_id in cooldown_users:
+        gecen = (datetime.now().timestamp() - cooldown_users[user_id])
+        if gecen < COOLDOWN_TIME:
+            kalan = int(COOLDOWN_TIME - gecen)
+            await update.message.reply_text(f"⏰ **Yavaş Ol!**\n\nLütfen {kalan} saniye bekle ve tekrar dene.", parse_mode="Markdown")
+            return
+    
+    try:
+        args = context.args
+        if len(args) < 1:
+            await update.message.reply_text(f"❌ **Hatalı Kullanım!**\n\nDoğru kullanım: `/sms <numara> <adet> <aralık>`\nÖrnek: `/sms 5051234567 52 0`", parse_mode="Markdown")
+            return
+        
+        telno = args[0].replace(" ", "").replace("-", "")
+        
+        # Telefon kontrolü
+        if not telno.isdigit() or len(telno) != 10:
+            await update.message.reply_text(f"❌ **Hatalı Numara!**\n\n`{telno}` geçerli bir Türkiye numarası değil!\n\n📱 Örnek: `5051234567` (10 hane)", parse_mode="Markdown")
+            return
+        
+        # Kullanıcı ayarlarını al
+        user_config = load_user_config(user_id)
+        adet = user_config['adet']
+        delay = user_config['saniye']
+        
+        # Adet kontrolü
+        if len(args) >= 2:
+            try:
+                adet = int(args[1])
+                if adet > MAX_SMS:
+                    adet = MAX_SMS
+                if adet < MIN_SMS:
+                    adet = MIN_SMS
+            except:
+                pass
+        
+        # Aralık kontrolü
+        if len(args) >= 3:
+            try:
+                delay = int(args[2])
+                if delay > 10:
+                    delay = 10
+                if delay < 0:
+                    delay = 0
+            except:
+                pass
+        
+        # Cooldown'u başlat
+        cooldown_users[user_id] = datetime.now().timestamp()
+        
+        # Başlangıç mesajı
+        await update.message.reply_text(f"✅ **SMS Gönderimi Başlatılıyor!**\n\n📞 Numara: `+90{telno}`\n🎯 Hedef: `{adet}` SMS\n⏱️ Aralık: `{delay}` saniye\n\n⏳ Lütfen bekleyin...", parse_mode="Markdown")
+        
+        log_yaz(f"SMS başlatıldı: {user_id} - {telno} - {adet} adet")
+        
+        # Thread'de gönder (bot'u bloklamamak için)
+        thread = threading.Thread(
+            target=sms_gonderme_async,
+            args=(chat_id, telno, adet, delay, update.get_bot(), None)
+        )
+        thread.daemon = True
+        thread.start()
+        
+    except Exception as e:
+        await update.message.reply_text(f"❌ **Hata!**\n\n{str(e)}")
+        log_yaz(f"SMS komutu hatası: {e}")
+
+async def unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Bilinmeyen komutlar"""
+    await update.message.reply_text(f"❓ **Bilinmeyen Komut!**\n\nKomut listesi için `/help` yaz.", parse_mode="Markdown")
+
+async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Hata yakalayıcı"""
+    log_yaz(f"Hata: {context.error}")
+    if update and update.effective_chat:
+        await update.effective_chat.send_message("⚠️ Bir hata oluştu! Lütfen daha sonra tekrar dene.")
+
+def main() -> None:
+    print_banner()
+    
+    # Token kontrolü
+    if TOKEN == "":
+        print(f"{R}[!] HATA: Token bulunamadı!{W}")
+        print(f"{Y}[*] telegram-bot-ptb.py dosyasını aç ve TOKEN = \"\" yerine tokenini yaz{W}")
+        print(f"{Y}[*] BotFather'dan yeni bot alabilirsin: @BotFather{W}")
+        return
+    
+    print(f"{G}[+] Bot başlatılıyor...{W}")
+    print(f"{C}[+] Token: {TOKEN[:15]}...{W}")
+    print(f"{C}[+] Servis Sayısı: {len(servisler_sms)}{W}")
+    print(f"{C}[+] Maksimum SMS: {MAX_SMS}{W}")
+    print(f"{C}[+] Cooldown: {COOLDOWN_TIME} saniye{W}")
+    print(f"{G}[+] Bot aktif!{W}\n")
+    
+    log_yaz("Telegram PTB bot başlatıldı")
+    
+    # Application oluştur
+    application = Application.builder().token(TOKEN).build()
+    
+    # Handler'ları ekle
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(CommandHandler("info", info_command))
+    application.add_handler(CommandHandler("config", config_command))
+    application.add_handler(CommandHandler("set", set_command))
+    application.add_handler(CommandHandler("servisler", servisler_command))
+    application.add_handler(CommandHandler("sms", sms_command))
+    
+    # Bilinmeyen komutlar
+    application.add_handler(MessageHandler(filters.COMMAND, unknown_command))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, unknown_command))
+    
+    # Hata yakalayıcı
+    application.add_error_handler(error_handler)
+    
+    # Bot'u başlat
+    application.run_polling(allowed_updates=Update.ALL_TYPES)
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        print(f"\n{R}[!] Bot durduruldu.{W}")
+        log_yaz("Bot durduruldu")
