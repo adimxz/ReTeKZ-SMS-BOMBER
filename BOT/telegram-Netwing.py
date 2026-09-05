@@ -6,7 +6,7 @@ from time import sleep
 TOKEN = ""
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text(f"Merhaba\!\nBirilerini rahatsız etmek istiyorsan doğru yere geldin\.\n*_/help_* yazarak komutları görebilirsin\.\nİyi eğlenceler\!\n\n[_Kaynak Kodu_](https://github.com/adimxz/ReTeKZ/)\n[_Twitter_](https://twitter.com/_2ENZ1PF6Y)", parse_mode='MarkdownV2')
+    await update.message.reply_text(f"Merhaba\!\nBirilerini rahatsız etmek istiyorsan doğru yere geldin\.\n*_/help_* yazarak komutları görebilirsin\.\nİyi eğlenceler\!\n\n[_Kaynak Kodu_](https://github.com/adimxz/Netwing-sms-bomber-v2.git/)\n[_Twitter_](https://twitter.com/_2ENZ1PF6Y)", parse_mode='MarkdownV2')
 
 async def sms(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if len(update.message.text.split(" ")) == 2 and update.message.text.split(" ")[0] == "/sms":
